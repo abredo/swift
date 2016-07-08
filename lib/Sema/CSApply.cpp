@@ -357,14 +357,35 @@ namespace {
     /// Recognize used conformances from an imported type when we must emit
     /// the witness table.
     ///
-    /// This arises in _BridgedNSError, where we wouldn't otherwise pull in
-    /// the witness table, causing dynamic casts to perform incorrectly.
+    /// This arises in _BridgedStoredNSError, where we wouldn't
+    /// otherwise pull in the witness table, causing dynamic casts to
+    /// perform incorrectly, and _ErrorCodeProtocol, where we need to
+    /// check for _BridgedStoredNSError conformances on the
+    /// corresponding ErrorType.
     void checkForImportedUsedConformances(Type toType) {
-      if (auto bridgedNSErrorProtocol = cs.getASTContext().getProtocol(
-              KnownProtocolKind::BridgedNSError)) {
+      auto &tc = cs.getTypeChecker();
+      auto &ctx = tc.Context;
+      if (auto bridgedStoredNSErrorProtocol = ctx.getProtocol(
+              KnownProtocolKind::BridgedStoredNSError)) {
         // Force it as "Used", if it conforms
-        cs.getTypeChecker().conformsToProtocol(toType, bridgedNSErrorProtocol,
+        cs.getTypeChecker().conformsToProtocol(toType,
+                                               bridgedStoredNSErrorProtocol,
                                                dc, ConformanceCheckFlags::Used);
+      }
+
+      if (auto errorCodeProto = ctx.getProtocol(
+              KnownProtocolKind::ErrorCodeProtocol)) {
+        ProtocolConformance *conformance = nullptr;
+        if (tc.conformsToProtocol(
+                toType, errorCodeProto, dc,
+                ConformanceCheckFlags::SuppressDependencyTracking,
+                &conformance) &&
+            conformance) {
+          if (Type errorType = ProtocolConformance::getTypeWitnessByName(
+                                 toType, conformance, ctx.Id_ErrorType, &tc)) {
+            checkForImportedUsedConformances(errorType);
+          }
+        }
       }
     }
 

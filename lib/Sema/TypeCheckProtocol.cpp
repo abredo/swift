@@ -4112,6 +4112,26 @@ bool TypeChecker::conformsToProtocol(Type T, ProtocolDecl *Proto,
     if (auto sf = DC->getParentSourceFile()) {
       sf->addUsedConformance(normalConf);
     }
+
+    // Hack: If we've used a conformance to the _BridgedStoredNSError
+    // protocol, also use the RawRepresentable and _ErrorCodeProtocol
+    // conformances on the Code associated type witness.
+    if (Proto->isSpecificProtocol(KnownProtocolKind::BridgedStoredNSError)) {
+      if (auto codeType = ProtocolConformance::getTypeWitnessByName(
+                            T, concrete, Context.Id_Code, this)) {
+        if (auto codeProto =
+                   Context.getProtocol(KnownProtocolKind::ErrorCodeProtocol)) {
+          (void)conformsToProtocol(codeType, codeProto, DC, options, nullptr,
+                                   SourceLoc());
+        }
+
+        if (auto rawProto =
+                   Context.getProtocol(KnownProtocolKind::RawRepresentable)) {
+          (void)conformsToProtocol(codeType, rawProto, DC, options, nullptr,
+                                   SourceLoc());
+        }
+      }
+    }
   }
   return true;
 }
